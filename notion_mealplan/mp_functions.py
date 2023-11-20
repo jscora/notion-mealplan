@@ -28,6 +28,13 @@ filter_prev = {
     }
 }
 
+filter_ld = {
+    "property": "Dish",
+    "multi_select": {
+        "contains": "Lunch/Dinner"
+    }
+}
+
 class NotionClient():
     #class to deal with Notion API
     #gets notion key and page number from environment variables
@@ -107,10 +114,11 @@ class NotionDatabase():
         #output: page ids to update (again, could be done in NotionDatabase as a method?)
         return(self.db['results'][k]['id'])
 
-    def random_select(self,n):
+    def random_select(self,n,prev_pages=None,repeat_freq=0):
         #randomly select indices
         #input: length of database
-        #output: list of unique integers
+        #output: list of unique integer
+        
         self.sample = random.sample(range(0,self.db_len),k=n)
         pages = []
         for s in self.sample:
@@ -118,7 +126,7 @@ class NotionDatabase():
 
         type(self).selected_pages = pages  #store list of pages selected (in case size of database changes between calls)
 
-    def get_prev(self):
+    def get_selected(self):
         pages = []
         for i in range(0,self.db_len):
             pages.append(self.get_page(i))
@@ -141,7 +149,7 @@ class NotionDatabase():
                 print('for page id {0}'.format(page))
                 print(errcode)
 
-def get_mealplan(k):
+def get_mealplan(k,repeat_freq):
     notion_client = NotionClient(os.environ.get("NOTION_KEY"))
 
     #remove prev meal plan
@@ -149,7 +157,7 @@ def get_mealplan(k):
     prev_recipes.load_db(os.environ.get("NOTION_PAGE_ID"),filter_object = filter_prev)
     print(prev_recipes.db_len)
     if prev_recipes.db_len > 0:
-        prev_recipes.get_prev()
+        prev_recipes.get_selected()
         prev_recipes.update_planned(unplanned_properties)
     else:
         print("no previous meal plan")
@@ -158,5 +166,5 @@ def get_mealplan(k):
     recipes = NotionDatabase(notion_client)
     recipes.load_db(os.environ.get("NOTION_PAGE_ID"))
     print(recipes.db_len)
-    recipes.random_select(k)
+    recipes.random_select(k,prev_recipes.selected_pages,repeat_freq)
     recipes.update_planned(planned_properties)
