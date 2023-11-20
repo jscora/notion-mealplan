@@ -6,7 +6,6 @@ from urllib.parse import urljoin
 from dotenv import load_dotenv
 import random 
 
-load_dotenv()
 
 #preformatted calls for the API
 planned_properties = {
@@ -34,6 +33,16 @@ filter_ld = {
         "contains": "Lunch/Dinner"
     }
 }
+
+def load_env_variables():
+    #check for Notion variables
+    if (not "NOTION_KEY" in os.environ) and (not "NOTION_PAGE_ID" in os.environ):
+        load_dotenv()
+    elif (not "NOTION_KEY" in os.environ) and ("NOTION_PAGE_ID" in os.environ):
+        print("Notion key doesn't exist")
+    elif ("NOTION_KEY" in os.environ) and (not "NOTION_PAGE_ID" in os.environ):
+        print("Notion page id doesn't exist")
+    
 
 class NotionClient():
     #class to deal with Notion API
@@ -109,7 +118,7 @@ class NotionDatabase():
         
 
 
-    def get_page(self,k):
+    def get_page(self,k:int):
         #input: list of unique integers
         #output: page ids to update (again, could be done in NotionDatabase as a method?)
         return(self.db['results'][k]['id'])
@@ -150,11 +159,17 @@ class NotionDatabase():
                 print(errcode)
 
 def get_mealplan(k,repeat_freq):
-    notion_client = NotionClient(os.environ.get("NOTION_KEY"))
+
+    load_env_variables()
+
+    notion_key = os.environ.get("NOTION_KEY")
+    notion_page_id = os.environ.get("NOTION_PAGE_ID")
+
+    notion_client = NotionClient(notion_key)
 
     #remove prev meal plan
     prev_recipes = NotionDatabase(notion_client)
-    prev_recipes.load_db(os.environ.get("NOTION_PAGE_ID"),filter_object = filter_prev)
+    prev_recipes.load_db(notion_page_id,filter_object = filter_prev)
     print(prev_recipes.db_len)
     if prev_recipes.db_len > 0:
         prev_recipes.get_selected()
@@ -164,7 +179,7 @@ def get_mealplan(k,repeat_freq):
     
     #get new meal plan
     recipes = NotionDatabase(notion_client)
-    recipes.load_db(os.environ.get("NOTION_PAGE_ID"))
+    recipes.load_db(notion_page_id)
     print(recipes.db_len)
     recipes.random_select(k,prev_recipes.selected_pages,repeat_freq)
     recipes.update_planned(planned_properties)
