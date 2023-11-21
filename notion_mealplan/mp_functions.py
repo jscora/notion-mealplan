@@ -5,6 +5,7 @@ import json
 from urllib.parse import urljoin
 from dotenv import load_dotenv
 import random 
+from typing import Union, List, Sequence, Generator, Mapping
 
 
 #preformatted calls for the API
@@ -81,7 +82,6 @@ class NotionClient():
         #properties would have to be a dict of property names and values
 
 
-    
 
 class NotionDatabase():
     
@@ -99,9 +99,9 @@ class NotionDatabase():
         page_count = 1
         print(f"Loading page {page_count}")
         db_response = self.notion_client.query_database(db_id, filter_object)
-        records = []
+        records = {}
         if db_response.ok:
-            results = db_response.json()
+            records = db_response.json()
             db_response_obj = db_response.json()
 
             while db_response_obj.get("has_more"):
@@ -111,19 +111,19 @@ class NotionDatabase():
                 db_response = self.notion_client.query_database(db_id, filter_object, start_cursor=start_cursor)
                 
                 if db_response.ok:
-                    results = ChainMap(results,db_response.json())
+                    records = ChainMap(records,db_response.json())
         
-        self.db = results
+        self.db = records
         self.db_len = len(self.db['results']) #calculate length every time database is loaded in 
         
 
 
-    def get_page(self,k:int):
+    def get_page(self,k:int) -> str:
         #input: list of unique integers
         #output: page ids to update (again, could be done in NotionDatabase as a method?)
         return(self.db['results'][k]['id'])
 
-    def random_select(self,n,prev_pages=None,repeat_freq=0):
+    def random_select(self,n:int,prev_pages=None,repeat_freq: int=0):
         #randomly select indices
         #input: length of database
         #output: list of unique integer
@@ -141,7 +141,7 @@ class NotionDatabase():
             pages.append(self.get_page(i))
         type(self).selected_pages = pages
 
-    def update_planned(self,properties_to_update):
+    def update_planned(self,properties_to_update: Mapping):
 
         #update planned column for specific pages in database 
         #input: pages ids to update in the database
@@ -158,7 +158,7 @@ class NotionDatabase():
                 print('for page id {0}'.format(page))
                 print(errcode)
 
-def get_mealplan(k,repeat_freq):
+def get_mealplan(k:int,repeat_freq:int):
 
     load_env_variables()
 
