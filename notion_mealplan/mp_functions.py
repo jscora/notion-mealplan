@@ -167,7 +167,7 @@ def get_mealplan(k:int,repeat_freq:int):
 
     notion_client = NotionClient(notion_key)
 
-    #remove prev meal plan
+    #remove prev meal plan -- should this be its own function?
     prev_recipes = NotionDatabase(notion_client)
     prev_recipes.load_db(notion_page_id,filter_object = filter_prev)
     print(prev_recipes.db_len)
