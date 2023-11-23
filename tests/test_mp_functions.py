@@ -6,6 +6,7 @@ import requests
 
 filter_prev = {"property": "Planned this week", "checkbox": {"equals": True}}
 filter_b = {"property": "Dish", "multi_select": {"contains": "Breakfast"}}
+filter_bad = {"property": "Fish", "multi_select": {"contains": "Elevensies"}}
 
 update_planned_props = {"properties": {"Planned this week": {"checkbox": True}}}
 update_prev_planned_props = {"properties": {"Planned this week": {"checkbox": False}}}
@@ -28,8 +29,8 @@ def loaded_database(client, notion_keys):
 
 
 @pytest.fixture
-def bad_keys():
-    return ["123a", "543b"]
+def bad_keys() -> Tuple[str, str]:
+    return ("123a", "543b")
 
 
 @pytest.fixture(scope="session")
@@ -60,8 +61,6 @@ def test_load_env_variables():
 
     assert "NOTION_KEY" in os.environ and "NOTION_PAGE_ID" in os.environ
     # is there a way to test that these both exist and aren't empty?
-    # also theoretically I should clean this up after? I.e. remove them from my environment?
-    # then won't be able to do other stuff though
 
 
 def test_loaddb(loaded_database):
@@ -70,18 +69,27 @@ def test_loaddb(loaded_database):
     assert l_db.db_len > 0
     assert "results" in l_db.db
 
-    # check that pages in database have planned this week parameter?
+    # check that pages in database have planned this week parameter
+    assert "Planned this week" in l_db.db["results"][0]["properties"]
 
 
 @pytest.mark.xfail
-def test_bad_load_db(bad_id, database):
+def test_bad_load_db(loaded_database):
     # check response when database is empty?
-    pass
+    # or check what happens when you try to load in with bad keys?
+    # not sure what to do here
+    # also should test that it fails when a bad filter is given?
+    l_db = loaded_database(filter_bad)
+    assert l_db.db_len == 0
 
 
-def test_get_page():
+def test_get_page(loaded_database):
     """Function to test that get_page works"""
-    pass
+
+    l_db = loaded_database(None)
+    page = l_db.get_page(0)
+
+    assert isinstance(page, str)
 
 
 def test_random_select(loaded_database):
@@ -115,23 +123,42 @@ def test_get_selected(loaded_database):
 
 def test_update_planned_and_remove(loaded_database):
     """Function that checks that update_planned works, and then removes planned recipes from database"""
+    # get planned meals from database and remove
+    prev_db = loaded_database(filter_prev)
+    if prev_db.db_len > 0:
+        prev_db.get_selected()
+        prev_db.update_planned(update_prev_planned_props)
+
+    # select random meals
     l_db = loaded_database(None)
     l_db.random_select(2)
     l_db.update_planned(update_planned_props)
 
     # check that they exist
-    prev_db = loaded_database(filter_prev)
+    prev_db2 = loaded_database(filter_prev)
 
-    assert len(l_db.selected_pages) == prev_db.db_len
+    assert len(l_db.selected_pages) == prev_db2.db_len
 
-    prev_db.update_planned(update_prev_planned_props)
+    prev_db2.get_selected()
+    prev_db2.update_planned(update_prev_planned_props)
+
+    # re-add the meals that were planned before?
 
 
-def test_remove_prev():
+def test_remove_prev(loaded_database, client, notion_keys):
     # how do I test this? Do I have to add a planned meal and check that it's removed?
     # this would take a long time, not sure it's necessary
     # might also want a negative test for this
-    pass
+    db_1 = loaded_database(filter_b)
+    db_1.random_select(1)
+    db_1.update_planned(update_prev_planned_props)
+
+    n_key, n_page_id = notion_keys
+    prev_db = mp.remove_prev(client, n_key, n_page_id)
+
+    db_2 = loaded_database(filter_prev)
+
+    assert db_2.db_len == 0
 
 
 def test_get_mealplan():
