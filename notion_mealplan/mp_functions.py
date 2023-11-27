@@ -101,6 +101,11 @@ class NotionDatabase:
 
                 if db_response.ok:
                     records = ChainMap(records, db_response.json())
+                else:
+                    db_response.raise_for_status()
+        else:
+            # raise an error if there's something wrong
+            db_response.raise_for_status()
 
         self.db = records
         self.db_len = len(
@@ -173,6 +178,7 @@ class NotionDatabase:
             else:
                 print("for page id {0}".format(page))
                 print(errcode)
+                errcode.raise_for_status()
 
 
 def remove_prev(notion_client, notion_key, notion_page_id):

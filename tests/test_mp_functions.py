@@ -80,7 +80,6 @@ def test_bad_load_db(loaded_database):
     # not sure what to do here
     # also should test that it fails when a bad filter is given?
     l_db = loaded_database(filter_bad)
-    assert l_db.db_len == 0
 
 
 def test_get_page(loaded_database):
@@ -161,7 +160,10 @@ def test_remove_prev(loaded_database, client, notion_keys):
     assert db_2.db_len == 0
 
 
-def test_get_mealplan():
+def test_get_mealplan(notion_keys, client, loaded_database):
     # not sure how to test this function
     # doesn't really have an output
-    pass
+    mp.get_mealplan(5, 0)
+
+    db1 = loaded_database(filter_prev)
+    assert db1.db_len == 5
