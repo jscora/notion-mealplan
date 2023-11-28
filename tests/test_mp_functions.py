@@ -161,9 +161,12 @@ def test_remove_prev(loaded_database, client, notion_keys):
 
 
 def test_get_mealplan(notion_keys, client, loaded_database):
-    # not sure how to test this function
-    # doesn't really have an output
+    """Function that checks that the meal plan is added successfully"""
     mp.get_mealplan(5, 0)
 
     db1 = loaded_database(filter_prev)
     assert db1.db_len == 5
+
+    # return everything to prev (nothing planned)
+    db1.get_selected()
+    db1.update_planned(update_prev_planned_props)
