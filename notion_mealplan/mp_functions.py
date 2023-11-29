@@ -6,16 +6,9 @@ from urllib.parse import urljoin
 from dotenv import load_dotenv
 import random
 from typing import Union, List, Sequence, Generator, Mapping
+from . import notion_filters as nf
 
-
-# preformatted calls for the API
-update_planned_props = {"properties": {"Planned this week": {"checkbox": True}}}
-
-update_prev_planned_props = {"properties": {"Planned this week": {"checkbox": False}}}
-
-filter_prev = {"property": "Planned this week", "checkbox": {"equals": True}}
-
-filter_ld = {"property": "Dish", "multi_select": {"contains": "Lunch/Dinner"}}
+n_headings = nf.headings
 
 
 def load_env_variables():
@@ -66,8 +59,10 @@ class NotionClient:
         pg_url = urljoin(self.NOTION_BASE_URL, f"pages/{page_id}")
 
         return self.session.patch(pg_url, json=properties)
-        # method to update a page in Notion
-        # properties would have to be a dict of property names and values
+
+    def get_children(self, block_id):
+        b_url = urljoin(self.NOTION_BASE_URL, f"blocks/{block_id}/children")
+        return self.session.get(b_url)
 
 
 class NotionDatabase:
@@ -183,17 +178,19 @@ class NotionDatabase:
 
 def remove_prev(notion_client, notion_key, notion_page_id):
     prev_recipes = NotionDatabase(notion_client)
-    prev_recipes.load_db(notion_page_id, filter_object=filter_prev)
+    prev_recipes.load_db(notion_page_id, filter_object=nf.filter_prev)
     print(prev_recipes.db_len)
     if prev_recipes.db_len > 0:
         prev_recipes.get_selected()
-        prev_recipes.update_planned(update_prev_planned_props)
+        prev_recipes.update_planned(nf.update_prev_planned_props)
     else:
         print("no previous meal plan")
     return prev_recipes
 
 
 def get_mealplan(k: int, repeat_freq: int):
+    """Function that gets the previous meal plan, removes it, and selects a new meal plan."""
+
     load_env_variables()
 
     notion_key = os.environ.get("NOTION_KEY")
@@ -206,7 +203,82 @@ def get_mealplan(k: int, repeat_freq: int):
 
     # get new meal plan
     recipes = NotionDatabase(notion_client)
-    recipes.load_db(notion_page_id, filter_object=filter_ld)
+    recipes.load_db(notion_page_id, filter_object=nf.filter_ld)
     print(recipes.db_len)
     recipes.random_select(k, prev_recipes.selected_pages, repeat_freq)
-    recipes.update_planned(update_planned_props)
+    recipes.update_planned(nf.update_planned_props)
+
+
+def check_ingredients(block_object):
+    for i in range(0, len(block_object["results"])):
+        dtype = block_object["results"][i]["type"]
+
+        if dtype in n_headings:
+            header = block_object["results"][i][dtype]["rich_text"][0]["plain_text"]
+            if header == "Ingredients":
+                r_ing = block_object["results"][i + 1 :]
+            else:
+                r_ing = None
+        else:
+            r_ing = None
+    return r_ing
+
+
+def iterate_block(block_result, notion_client):
+    block_object = block_result.json()
+    for b in block_object["results"]:
+        child_ind = b.get("has_children")
+        if child_ind == True:
+            block_id = b.get("id")
+            block_response = notion_client.get_children(block_id)
+            if block_response.ok:
+                iterate_block(block_response, notion_client)
+            else:
+                block_response.raise_for_status()
+                block_object = block_response.json()
+                return block_object
+        elif child_ind == False:
+            return block_object
+
+
+def get_ingredients(page_id, notion_client):
+    """Functions that gets the ingredients from a selected recipe page"""
+
+    page_response = notion_client.get_children(page_id)
+
+    # get block children until they don't have their own children
+    if page_response.ok:
+        block_object = iterate_block(page_response, notion_client)
+    else:
+        page_response.raise_for_status()
+
+    # check that the block has header 'Ingredients'
+    r_ing = check_ingredients(block_object)
+
+    if r_ing is None:
+        print("Couldn't find ingredients block")
+        ing = None
+    else:
+        ing = []
+        # get ingredients from list
+        for r in r_ing:
+            if r["type"] == "bulleted_list_item":
+                ing.append(r["bulleted_list_item"]["rich_text"][0]["plain_text"])
+            else:
+                print("ingredients may not be in bulleted list")
+
+    return ing
+
+
+def ingredients_to_list(recipes, notion_client):
+    """Function that takes the planned meals, gets ingredients for each, and condenses them into a grocery list"""
+
+    if len(recipes.selected_pages > 0):
+        ingredients = []
+        for page in recipes.selected_pages:
+            ing = get_ingredients(page_id, notion_client)
+            ingredients.append(ing)
+
+
+def post_grocery_list():
+    """Function that takes grocery list and posts it to the Notion Meal Plan page"""

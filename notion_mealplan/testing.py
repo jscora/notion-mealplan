@@ -68,6 +68,7 @@ page_response = requests.get(
 
 
 page_object = page_response.json()
+results_ing = {}
 
 if page_response.ok:
     for r in page_object["results"]:
