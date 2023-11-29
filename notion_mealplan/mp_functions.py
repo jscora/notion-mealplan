@@ -1,11 +1,12 @@
 from collections import ChainMap
 import os
+from click import Option
 import requests
 import json
 from urllib.parse import urljoin
 from dotenv import load_dotenv
 import random
-from typing import Union, List, Sequence, Generator, Mapping
+from typing import Union, List, Sequence, Generator, Mapping, Optional
 from . import notion_filters as nf
 
 n_headings = nf.headings
@@ -27,7 +28,7 @@ class NotionClient:
     # outputs response from notion api
     # has methods for querying database and updating properties of a page in the database
 
-    def __init__(self, notion_key):
+    def __init__(self, notion_key: Optional[str]):
         self.notion_key = notion_key
 
         self.default_headers = {
@@ -55,12 +56,12 @@ class NotionClient:
 
         return self.session.post(db_url, json=params)
 
-    def update_page(self, page_id, properties):
+    def update_page(self, page_id: str, properties: Mapping):
         pg_url = urljoin(self.NOTION_BASE_URL, f"pages/{page_id}")
 
         return self.session.patch(pg_url, json=properties)
 
-    def get_children(self, block_id):
+    def get_children(self, block_id: str):
         b_url = urljoin(self.NOTION_BASE_URL, f"blocks/{block_id}/children")
         return self.session.get(b_url)
 
@@ -77,7 +78,7 @@ class NotionDatabase:
     def __init__(self, notion_client):
         self.notion_client = notion_client
 
-    def load_db(self, db_id, filter_object=None):
+    def load_db(self, db_id: Optional[str], filter_object=None):
         page_count = 1
         print(f"Loading page {page_count}")
         db_response = self.notion_client.query_database(db_id, filter_object)
@@ -112,7 +113,9 @@ class NotionDatabase:
         # output: page ids to update
         return self.db["results"][k]["id"]
 
-    def random_select(self, n: int, prev_pages=None, repeat_freq: int = 0):
+    def random_select(
+        self, n: int, prev_pages: Optional[Sequence] = None, repeat_freq: int = 0
+    ):
         # randomly select indices
         # output: list of unique integer
         rep = 0
@@ -147,7 +150,7 @@ class NotionDatabase:
 
         # type(self).selected_pages = pages  #store list of pages selected (in case size of database changes between calls)
 
-    def get_selected(self, page_ind: Union[None, Sequence] = None):
+    def get_selected(self, page_ind: Optional[Sequence] = None):
         pages = []
         if page_ind == None:
             for i in range(0, self.db_len):
@@ -176,7 +179,9 @@ class NotionDatabase:
                 errcode.raise_for_status()
 
 
-def remove_prev(notion_client, notion_key, notion_page_id):
+def remove_prev(
+    notion_client, notion_key: Optional[str], notion_page_id: Optional[str]
+):
     prev_recipes = NotionDatabase(notion_client)
     prev_recipes.load_db(notion_page_id, filter_object=nf.filter_prev)
     print(prev_recipes.db_len)
@@ -195,7 +200,6 @@ def get_mealplan(k: int, repeat_freq: int):
 
     notion_key = os.environ.get("NOTION_KEY")
     notion_page_id = os.environ.get("NOTION_PAGE_ID")
-
     notion_client = NotionClient(notion_key)
 
     # remove prev meal plan
@@ -209,10 +213,13 @@ def get_mealplan(k: int, repeat_freq: int):
     recipes.update_planned(nf.update_planned_props)
 
 
-def check_ingredients(block_object):
+def check_ingredients(block_object: Mapping) -> Optional[Mapping]:
+    """Checks if block has 'Ingredients' header"""
+
     for i in range(0, len(block_object["results"])):
         dtype = block_object["results"][i]["type"]
 
+        r_ing: Optional[Mapping]
         if dtype in n_headings:
             header = block_object["results"][i][dtype]["rich_text"][0]["plain_text"]
             if header == "Ingredients":
@@ -224,7 +231,9 @@ def check_ingredients(block_object):
     return r_ing
 
 
-def iterate_block(block_result, notion_client):
+def iterate_block(block_result, notion_client) -> Mapping:
+    """Iterates through page blocks until it finds one that does not have children"""
+
     block_object = block_result.json()
     for b in block_object["results"]:
         child_ind = b.get("has_children")
@@ -232,40 +241,49 @@ def iterate_block(block_result, notion_client):
             block_id = b.get("id")
             block_response = notion_client.get_children(block_id)
             if block_response.ok:
-                iterate_block(block_response, notion_client)
+                block_object = iterate_block(block_response, notion_client)
             else:
                 block_response.raise_for_status()
-                block_object = block_response.json()
-                return block_object
         elif child_ind == False:
             return block_object
+        else:
+            print(child_ind)
+            return block_object
+
+    return block_object
 
 
-def get_ingredients(page_id, notion_client):
+def get_ingredients(page_id: Optional[str], notion_client) -> Optional[Sequence]:
     """Functions that gets the ingredients from a selected recipe page"""
 
     page_response = notion_client.get_children(page_id)
 
     # get block children until they don't have their own children
+    block_object: Optional[Mapping]
+    ing: Optional[Sequence]
+    r_ing: Optional[Mapping]
+
     if page_response.ok:
         block_object = iterate_block(page_response, notion_client)
+
+        # check that the block has header 'Ingredients'
+        r_ing = check_ingredients(block_object)
+
+        if r_ing is None:
+            print("Couldn't find ingredients block")
+            ing = None
+        else:
+            ing = []
+            # get ingredients from list
+            for r in r_ing:
+                if r["type"] == "bulleted_list_item":
+                    ing.append(r["bulleted_list_item"]["rich_text"][0]["plain_text"])
+                else:
+                    print("ingredients may not be in bulleted list")
     else:
         page_response.raise_for_status()
-
-    # check that the block has header 'Ingredients'
-    r_ing = check_ingredients(block_object)
-
-    if r_ing is None:
-        print("Couldn't find ingredients block")
         ing = None
-    else:
-        ing = []
-        # get ingredients from list
-        for r in r_ing:
-            if r["type"] == "bulleted_list_item":
-                ing.append(r["bulleted_list_item"]["rich_text"][0]["plain_text"])
-            else:
-                print("ingredients may not be in bulleted list")
+        r_ing = None
 
     return ing
 
@@ -276,7 +294,7 @@ def ingredients_to_list(recipes, notion_client):
     if len(recipes.selected_pages > 0):
         ingredients = []
         for page in recipes.selected_pages:
-            ing = get_ingredients(page_id, notion_client)
+            ing = get_ingredients(page, notion_client)
             ingredients.append(ing)
 
 
