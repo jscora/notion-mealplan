@@ -170,3 +170,16 @@ def test_get_mealplan(notion_keys, client, loaded_database):
     # return everything to prev (nothing planned)
     db1.get_selected()
     db1.update_planned(update_prev_planned_props)
+
+
+def test_get_ingredients(client):
+    page_id = "52003476-fc7c-470b-9b22-886246f0c14e"
+
+    n_page = mp.NotionPage(client, "zoodles")
+    n_page.get_content([page_id])
+
+    assert len(n_page.page_contents) > 0
+
+    ingredients = n_page.get_ingredients()
+
+    assert len(ingredients) > 0

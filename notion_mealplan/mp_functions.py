@@ -213,89 +213,110 @@ def get_mealplan(k: int, repeat_freq: int):
     recipes.update_planned(nf.update_planned_props)
 
 
-def check_ingredients(block_object: Mapping) -> Optional[Mapping]:
+def check_ingredients(block_object: Mapping):
     """Checks if block has 'Ingredients' header"""
+    dtype = block_object["type"]
 
-    for i in range(0, len(block_object["results"])):
-        dtype = block_object["results"][i]["type"]
-
-        r_ing: Optional[Mapping]
-        if dtype in n_headings:
-            header = block_object["results"][i][dtype]["rich_text"][0]["plain_text"]
-            if header == "Ingredients":
-                r_ing = block_object["results"][i + 1 :]
-            else:
-                r_ing = None
+    ing_true: bool
+    if dtype in n_headings:
+        header = block_object[dtype]["rich_text"][0]["plain_text"]
+        if header == "Ingredients":
+            ing_true = True
         else:
-            r_ing = None
-    return r_ing
-
-
-def iterate_block(block_result, notion_client) -> Mapping:
-    """Iterates through page blocks until it finds one that does not have children"""
-
-    block_object = block_result.json()
-    for b in block_object["results"]:
-        child_ind = b.get("has_children")
-        if child_ind == True:
-            block_id = b.get("id")
-            block_response = notion_client.get_children(block_id)
-            if block_response.ok:
-                block_object = iterate_block(block_response, notion_client)
-            else:
-                block_response.raise_for_status()
-        elif child_ind == False:
-            return block_object
-        else:
-            print(child_ind)
-            return block_object
-
-    return block_object
-
-
-def get_ingredients(page_id: Optional[str], notion_client) -> Optional[Sequence]:
-    """Functions that gets the ingredients from a selected recipe page"""
-
-    page_response = notion_client.get_children(page_id)
-
-    # get block children until they don't have their own children
-    block_object: Optional[Mapping]
-    ing: Optional[Sequence]
-    r_ing: Optional[Mapping]
-
-    if page_response.ok:
-        block_object = iterate_block(page_response, notion_client)
-
-        # check that the block has header 'Ingredients'
-        r_ing = check_ingredients(block_object)
-
-        if r_ing is None:
-            print("Couldn't find ingredients block")
-            ing = None
-        else:
-            ing = []
-            # get ingredients from list
-            for r in r_ing:
-                if r["type"] == "bulleted_list_item":
-                    ing.append(r["bulleted_list_item"]["rich_text"][0]["plain_text"])
-                else:
-                    print("ingredients may not be in bulleted list")
+            ing_true = False
     else:
-        page_response.raise_for_status()
-        ing = None
-        r_ing = None
+        ing_true = False
+    return ing_true
 
-    return ing
+
+class NotionPage:
+    """A class to get the contents of a Notion page and find the ingredients"""
+
+    def __init__(self, notion_client, name):
+        self.notion_client = notion_client
+        self.page_contents = []
+        self.recipe_name = name
+
+    def get_content(self, block_ids, depth=1):
+        """Gets all the blocks on the page"""
+        new_ids = []
+        for b_id in block_ids:
+            block_response = self.notion_client.get_children(b_id)
+            block_object = block_response.json()
+            self.page_contents.append(block_object["results"])
+
+            for b in block_object["results"]:
+                child_ind = b.get("has_children")
+                if child_ind == True:
+                    new_ids.append(b.get("id"))
+        if len(new_ids) > 0:
+            return self.get_content(new_ids, depth + 1)
+
+    def get_ingredients(self):
+        """Finds the ingredients block and returns a list of those ingredients"""
+
+        ing_true, ing_list = self.locate_ingredients()
+
+        if ing_true:
+            # we found an ingredients list!
+            ingredients = []
+            k = 0
+            for ing in ing_list:
+                if ing["type"] == "bulleted_list_item":
+                    ingredients.append(
+                        ing["bulleted_list_item"]["rich_text"][0]["plain_text"]
+                    )
+                else:
+                    if k + 1 < len(ing_list):
+                        # check if next one isn't empty
+                        type = ing_list[k + 1]["type"]
+                        if type == "bulleted_list_item":
+                            # there's just a gap in the list
+                            continue
+                        else:
+                            print(
+                                "Ingredients may be missing some items for {0}".format(
+                                    self.recipe_name
+                                )
+                            )
+
+                    else:
+                        # we're at the end of the list anyway
+                        continue
+                k += 1
+
+            return ingredients
+        else:
+            # there are no ingredients
+            print("No ingredients list found for {0}".format(self.recipe_name))
+
+    def locate_ingredients(self):
+        i = 0
+        ing_true = False
+
+        while ing_true is False or i < len(self.page_contents):
+            dtype = self.page_contents[i][0]["type"]
+            if dtype in n_headings:
+                header = self.page_contents[i][0][dtype]["rich_text"][0]["plain_text"]
+                if header.lower() == "ingredients":
+                    # then the blocks after are the list of ingredients
+                    ing_list = self.page_contents[i][1:]
+                    ing_true = True
+            i += 1
+
+        if ing_true == False:
+            ing_list = None
+        return (ing_true, ing_list)
 
 
 def ingredients_to_list(recipes, notion_client):
     """Function that takes the planned meals, gets ingredients for each, and condenses them into a grocery list"""
 
-    if len(recipes.selected_pages > 0):
-        ingredients = []
-        for page in recipes.selected_pages:
-            ing = get_ingredients(page, notion_client)
-            ingredients.append(ing)
+    # if len(recipes.selected_pages > 0):
+    #     ingredients = []
+    #     for page in recipes.selected_pages:
+    #         ing = get_ingredients(page, notion_client)
+    #         ingredients.append(ing)
 
 
 def post_grocery_list():
