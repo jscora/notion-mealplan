@@ -1,3 +1,4 @@
+from ast import Tuple
 from collections import ChainMap
 import os
 from click import Option
@@ -7,7 +8,9 @@ from urllib.parse import urljoin
 from dotenv import load_dotenv
 import random
 from typing import Union, List, Sequence, Generator, Mapping, Optional
+from ingredient_parser import parse_multiple_ingredients
 from . import notion_filters as nf
+from . import units as units
 
 n_headings = nf.headings
 
@@ -67,18 +70,23 @@ class NotionClient:
 
 
 class NotionDatabase:
-    # holds notion database
-    # reads in all of the pages into one class object
-    # has a method that gets the length of the final database
-    # Mubdi pointed out could even have a variable that stores all the previous iterations of random select
-    # that way when you call it again, it would be able to compare to prev versions, and if there's repetition
-    # repeat as necessary
+    """Class that contains and performs methods on a Notion Database"""
+
     selected_pages = []
 
     def __init__(self, notion_client):
         self.notion_client = notion_client
 
     def load_db(self, db_id: Optional[str], filter_object=None):
+        """Loads in database pages from Notion, iterating through pages if necessary
+
+        Parameters
+        ----------
+        db_id : Optional[str]
+            The id of the database to be read in
+        filter_object : _type_, optional
+            Any filter to be applied to the database, typically one of those in notion_filters, by default None
+        """
         page_count = 1
         print(f"Loading page {page_count}")
         db_response = self.notion_client.query_database(db_id, filter_object)
@@ -108,22 +116,51 @@ class NotionDatabase:
             self.db["results"]
         )  # calculate length every time database is loaded in
 
-    def get_page(self, k: int) -> str:
-        # input: unique integer
-        # output: page ids to update
-        return self.db["results"][k]["id"]
+    def get_page(self, k: int) -> tuple[str, str]:
+        """Gets page name and id from the database info
+
+        Parameters
+        ----------
+        k : int
+            _description_
+
+        Returns
+        -------
+        Tuple[str,str]
+            page_id : str
+                id of the page
+            page_name : str
+                title of the page
+        """
+
+        page_id = self.db["results"][k]["id"]
+        page_name = self.db["results"][k]["properties"]["Name"]["title"][0][
+            "plain_text"
+        ]
+        return (page_id, page_name)
 
     def random_select(
         self, n: int, prev_pages: Optional[Sequence] = None, repeat_freq: int = 0
     ):
-        # randomly select indices
-        # output: list of unique integer
+        """randomly selects n unique recipes, checking against previous recipe list for repetition
+
+        Parameters
+        ----------
+        n : int
+            number of recipes to select
+        prev_pages : Optional[Sequence], optional
+            previous list of recipe ids, by default None
+        repeat_freq : int, optional
+            number of times that a recipe from prev_pages can appear, by default 0
+        """
+
         rep = 0
         pages = []
+        page_names = []
         i = 0
         while i < n:
             k = random.randint(0, self.db_len - 1)
-            page = self.get_page(k)
+            page, page_name = self.get_page(k)
             if prev_pages is not None and page in prev_pages:
                 rep += 1
                 if rep > repeat_freq:
@@ -131,13 +168,17 @@ class NotionDatabase:
                 else:
                     i += 1
                     pages.append(page)
+                    page_names.append(page_name)
             elif page in pages:
                 continue
             else:
                 i += 1
                 pages.append(page)
+                page_names.append(page_name)
 
         self.selected_pages = pages
+        self.selected_page_names = page_names
+
         # self.sample = random.sample(range(0,self.db_len),k=n)
 
         # pages = []
@@ -151,23 +192,40 @@ class NotionDatabase:
         # type(self).selected_pages = pages  #store list of pages selected (in case size of database changes between calls)
 
     def get_selected(self, page_ind: Optional[Sequence] = None):
+        """Updated self.selected_pages and self.selected_page_names, either with a list of page ids or with all of the pages currently in the database results
+
+        Parameters
+        ----------
+        page_ind : Optional[Sequence], optional
+            list of page ids to select, by default None
+        """
         pages = []
+        page_names = []
         if page_ind == None:
             for i in range(0, self.db_len):
-                pages.append(self.get_page(i))
+                page, page_name = self.get_page(i)
+                pages.append(page)
+                page_names.append(page_name)
             self.selected_pages = pages
+            self.selected_page_names = page_names
         else:
             for p in page_ind:
-                pages.append(self.get_page(p))
+                page, page_name = self.get_page(p)
+                pages.append(page)
+                page_names.append(page_name)
             self.selected_pages = pages
+            self.selected_page_names = page_names
 
     def update_planned(self, properties_to_update: Mapping):
-        # update planned column for specific pages in database
-        # input: pages ids to update in the database
-        # output: calls the NotionClient and updates the properties of each page id in the list
+        """Updates pages in self.selected_pages with the parameter 'Planned this week'
+
+        Parameters
+        ----------
+        properties_to_update : Mapping
+            typically from the notion_filters.py
+        """
+
         for page in self.selected_pages:
-            # could add this in to the random sample code so that I don't have to do a loop twice
-            # but they're short loops so I'm not too worried
             errcode = self.notion_client.update_page(page, properties_to_update)
 
             # check that this worked
@@ -182,6 +240,22 @@ class NotionDatabase:
 def remove_prev(
     notion_client, notion_key: Optional[str], notion_page_id: Optional[str]
 ):
+    """_summary_
+
+    Parameters
+    ----------
+    notion_client : NotionClient
+        _description_
+    notion_key : Optional[str]
+        the personal notion key
+    notion_page_id : Optional[str]
+        _description_
+
+    Returns
+    -------
+    NotionDatabase
+        returns a database with the previously selected recipes
+    """
     prev_recipes = NotionDatabase(notion_client)
     prev_recipes.load_db(notion_page_id, filter_object=nf.filter_prev)
     print(prev_recipes.db_len)
@@ -194,7 +268,15 @@ def remove_prev(
 
 
 def get_mealplan(k: int, repeat_freq: int):
-    """Function that gets the previous meal plan, removes it, and selects a new meal plan."""
+    """Function that gets the previous meal plan, removes it, and selects a new meal plan.
+
+    Parameters
+    ----------
+    k : int
+        _description_
+    repeat_freq : int
+        _description_
+    """
 
     load_env_variables()
 
@@ -232,12 +314,12 @@ def check_ingredients(block_object: Mapping):
 class NotionPage:
     """A class to get the contents of a Notion page and find the ingredients"""
 
-    def __init__(self, notion_client, name):
+    def __init__(self, notion_client, name: str):
         self.notion_client = notion_client
         self.page_contents = []
         self.recipe_name = name
 
-    def get_content(self, block_ids, depth=1):
+    def get_content(self, block_ids):
         """Gets all the blocks on the page"""
         new_ids = []
         for b_id in block_ids:
@@ -250,7 +332,7 @@ class NotionPage:
                 if child_ind == True:
                     new_ids.append(b.get("id"))
         if len(new_ids) > 0:
-            return self.get_content(new_ids, depth + 1)
+            return self.get_content(new_ids)
 
     def get_ingredients(self):
         """Finds the ingredients block and returns a list of those ingredients"""
@@ -309,14 +391,168 @@ class NotionPage:
         return (ing_true, ing_list)
 
 
+def get_full_ingred_list(recipes, notion_client) -> Sequence:
+    """Function that takes planned meals and gets a list of ingredient sentences"""
+    all_ingred = []
+    if len(recipes.selected_pages) > 0:
+        all_ingred = []
+        for page, page_name in zip(recipes.selected_pages, recipes.selected_page_names):
+            n_page = NotionPage(notion_client, page_name)
+            n_page.get_content([page])
+            ingred = n_page.get_ingredients()
+            print(ingred)
+            all_ingred = all_ingred + ingred
+    else:
+        print("no recipes found")
+
+    return all_ingred
+
+
 def ingredients_to_list(recipes, notion_client):
     """Function that takes the planned meals, gets ingredients for each, and condenses them into a grocery list"""
 
-    # if len(recipes.selected_pages > 0):
-    #     ingredients = []
-    #     for page in recipes.selected_pages:
-    #         ing = get_ingredients(page, notion_client)
-    #         ingredients.append(ing)
+    all_ingred = get_full_ingred_list(recipes, notion_client)
+
+    parsed_ingredients = parse_multiple_ingredients(all_ingred)
+    ingred_dict = dict.fromkeys(["name", "amount", "unit"], [])
+    for p in parsed_ingredients:
+        if p.name.text in ingred_dict["name"]:
+            # add the amounts together
+
+            # get the ingredient from the dictionary
+            ind = ingred_dict["name"].index(p.name.text)
+            add_amounts(p, ingred_dict, ind)
+
+            # this should be a separate function because will have to deal with unit incompatibilities
+            # probably shouldn't do it this way because will have to keep adding same ingredient?
+        else:
+            # add into the ingredient dictionary
+            ingred_dict["name"].extend(p.name.text)
+            if len(p.amount) > 0:
+                ingred_dict["amount"].extend(p.amount.quantity)
+                ingred_dict["unit"].extend(p.amount.unit)
+            else:
+                ingred_dict["amount"].extend(None)
+                ingred_dict["unit"].extend(None)
+
+    return ()
+
+
+def pluralize_unit(unit_a: str) -> str:
+    for plural, singular in unit.UNITS.items():
+        if unit_a == singular:
+            return plural
+        elif unit_a == plural:
+            return unit_a
+        else:
+            print("unit unchanged")
+            return unit_a
+
+
+def get_unit_type(unit_a: str) -> str:
+    if unit_a in units.WEIGHT:
+        return "weight"
+    elif unit_a in units.VOLUME:
+        return "volume"
+    else:
+        return "other"
+
+
+def convert_and_add_ingred(
+    unit_a: str, unit_b: str, ingred, ingred_dict: Mapping, i: int
+) -> tuple[str, str]:
+    unit_a_type = get_unit_type(unit_a)
+    unit_b_type = get_unit_type(unit_b)
+
+    if unit_a_type == "other" or unit_b_type == "other":
+        new_amount = "{0} + {1}".format(
+            ingred.amount.quantity, ingred_dict["amount"][i]
+        )
+        new_unit = "{0} + {1}".format(unit_a, unit_b)
+
+    elif unit_a_type == "weight" and unit_b_type == "weight":
+        ind_a = units.WEIGHT.index(unit_a)
+        ind_b = units.WEIGHT.index(unit_b)
+
+        conv = units.W_CONVERSION[ind_a, ind_b]
+
+        # get new amount
+        amount_a = ingred.amount.quantity * conv
+        new_amount = amount_a + ingred_dict["amount"][i]
+        new_unit = unit_b
+
+    elif unit_a_type == "volume" and unit_b_type == "volume":
+        ind_a = units.VOLUME.index(unit_a)
+        ind_b = units.VOLUME.index(unit_b)
+
+        conv = units.V_CONVERSION[ind_a, ind_b]
+
+        # get new amount
+        amount_a = ingred.amount.quantity * conv
+        new_amount = amount_a + ingred_dict["amount"][i]
+        new_unit = unit_b
+
+    elif unit_b_type != unit_a_type:
+        # convert unit a to unit b
+        print("units are not convertible")
+        new_amount = "{0} + {1}".format(
+            ingred.amount.quantity, ingred_dict["amount"][i]
+        )
+        new_unit = "{0} + {1}".format(unit_a, unit_b)
+
+    else:
+        print("something wrong")
+        print(unit_b_type, unit_a_type)
+        new_amount = "{0} + {1}".format(
+            ingred.amount.quantity, ingred_dict["amount"][i]
+        )
+        new_unit = "{0} + {1}".format(unit_a, unit_b)
+
+    return (new_amount, new_unit)
+
+
+def add_amounts(ingred, ingred_dict: Mapping, i: int) -> Mapping:
+    # needs to check if units are the same
+    unit_a = ingred.amount.unit
+    unit_b = ingred_dict["unit"][i]
+
+    # check if units are the same
+    if unit_a == unit_b:
+        # just add them together
+        new_amount = ingred.amount.quantity + ingred_dict["amount"][i]
+        ingred_dict["amount"][i] = new_amount
+    else:
+        if unit_a[-1] == "s":
+            # check if units are plural
+            if units.UNITS[unit_a] == unit_b:
+                print("unit a is pluralized")
+                new_amount = ingred.amount.quantity + ingred_dict["amount"][i]
+                new_unit = unit_a
+            else:
+                # units don't match
+                # pluralize units
+                unit_b = pluralize_unit(unit_b)
+                new_amount, new_unit = convert_and_add_ingred(
+                    unit_a, unit_b, ingred, ingred_dict, i
+                )
+
+        elif unit_b[-1] == "s":
+            if unit.UNITS[unit_b] == unit_a:
+                print("unit b is pluralized")
+                new_amount = ingred.amount.quantity + ingred_dict["amount"][i]
+                new_unit = unit_b
+            else:
+                # units don't match
+                unit_a = pluralize_unit(unit_a)
+                new_amount, new_unit = convert_and_add_ingred(
+                    unit_a, unit_b, ingred, ingred_dict, i
+                )
+
+        # add the new values to the dictionary
+        ingred_dict["amount"][i] = new_amount
+        ingred_dict["unit"][i] = new_unit
+
+    return ingred_dict
 
 
 def post_grocery_list():

@@ -183,3 +183,12 @@ def test_get_ingredients(client):
     ingredients = n_page.get_ingredients()
 
     assert len(ingredients) > 0
+
+
+def test_ingredients_to_list(client, loaded_database):
+    prev_db = loaded_database(filter_prev)
+    prev_db.get_selected()
+
+    parsed_ingredients = mp.ingredients_to_list(prev_db, client)
+
+    assert len(parsed_ingredients) > 0
