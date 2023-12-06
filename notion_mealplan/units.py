@@ -122,7 +122,7 @@ W_CONVERSIONS = np.array(
     ]
 )
 
-V_CONVERSIONTS = np.array(
+V_CONVERSIONS = np.array(
     [
         [
             1,

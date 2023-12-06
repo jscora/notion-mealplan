@@ -173,6 +173,7 @@ def test_get_mealplan(notion_keys, client, loaded_database):
 
 
 def test_get_ingredients(client):
+    """Function that tests the get_ingredients function"""
     page_id = "52003476-fc7c-470b-9b22-886246f0c14e"
 
     n_page = mp.NotionPage(client, "zoodles")
@@ -186,9 +187,18 @@ def test_get_ingredients(client):
 
 
 def test_ingredients_to_list(client, loaded_database):
+    """Function to test the ingredients_to_list_function"""
     prev_db = loaded_database(filter_prev)
     prev_db.get_selected()
 
     parsed_ingredients = mp.ingredients_to_list(prev_db, client)
 
     assert len(parsed_ingredients) > 0
+
+
+def test_post_grocery_list(client, loaded_database):
+    """Function to test that grocery list is posted"""
+
+    prev_db = loaded_database(filter_prev)
+    prev_db.get_selected()
+    mp.post_grocery_list(prev_db, client)
