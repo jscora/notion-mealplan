@@ -5,17 +5,11 @@ import json
 from urllib.parse import urljoin
 from dotenv import load_dotenv
 import random
-from typing import Union, List, Sequence, Generator, Mapping
+from typing import Union, List, Sequence, Generator, Mapping, Optional
+from . import notion_filters as nf
+from . import units as units
 
-
-# preformatted calls for the API
-update_planned_props = {"properties": {"Planned this week": {"checkbox": True}}}
-
-update_prev_planned_props = {"properties": {"Planned this week": {"checkbox": False}}}
-
-filter_prev = {"property": "Planned this week", "checkbox": {"equals": True}}
-
-filter_ld = {"property": "Dish", "multi_select": {"contains": "Lunch/Dinner"}}
+n_headings = nf.headings
 
 
 def load_env_variables():
@@ -34,7 +28,7 @@ class NotionClient:
     # outputs response from notion api
     # has methods for querying database and updating properties of a page in the database
 
-    def __init__(self, notion_key):
+    def __init__(self, notion_key: Optional[str]):
         self.notion_key = notion_key
 
         self.default_headers = {
@@ -62,29 +56,55 @@ class NotionClient:
 
         return self.session.post(db_url, json=params)
 
-    def update_page(self, page_id, properties):
+    def update_page(self, page_id: str, properties: Mapping):
         pg_url = urljoin(self.NOTION_BASE_URL, f"pages/{page_id}")
 
         return self.session.patch(pg_url, json=properties)
-        # method to update a page in Notion
-        # properties would have to be a dict of property names and values
+
+    def get_children(self, block_id: str):
+        b_url = urljoin(self.NOTION_BASE_URL, f"blocks/{block_id}/children")
+        return self.session.get(b_url)
+
+    def append_block_children(self, block_id: str, properties: Mapping):
+        ab_url = urljoin(self.NOTION_BASE_URL, f"blocks/{block_id}/children")
+        return self.session.patch(ab_url, json=properties)
+
+    def delete_block(self, block_id: str):
+        """Function that deletes blocks using Notion API
+
+        Parameters
+        ----------
+        block_id : str
+            id of block to be deleted
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        d_url = urljoin(self.NOTION_BASE_URL, f"blocks/{block_id}")
+        return self.session.delete(d_url)
 
 
 class NotionDatabase:
-    # holds notion database
-    # reads in all of the pages into one class object
-    # has a method that gets the length of the final database
-    # Mubdi pointed out could even have a variable that stores all the previous iterations of random select
-    # that way when you call it again, it would be able to compare to prev versions, and if there's repetition
-    # repeat as necessary
+    """Class that contains and performs methods on a Notion Database"""
+
     selected_pages = []
 
     def __init__(self, notion_client):
         self.notion_client = notion_client
 
-    def load_db(self, db_id, filter_object=None):
+    def load_db(self, db_id: Optional[str], filter_object=None):
+        """Loads in database pages from Notion, iterating through pages if necessary
+
+        Parameters
+        ----------
+        db_id : Optional[str]
+            The id of the database to be read in
+        filter_object : _type_, optional
+            Any filter to be applied to the database, typically one of those in notion_filters, by default None
+        """
         page_count = 1
-        print(f"Loading page {page_count}")
         db_response = self.notion_client.query_database(db_id, filter_object)
         records = {}
         if db_response.ok:
@@ -93,7 +113,6 @@ class NotionDatabase:
 
             while db_response_obj.get("has_more"):
                 page_count += 1
-                print(f"Loading page {page_count}")
                 start_cursor = db_response_obj.get("next_cursor")
                 db_response = self.notion_client.query_database(
                     db_id, filter_object, start_cursor=start_cursor
@@ -112,20 +131,51 @@ class NotionDatabase:
             self.db["results"]
         )  # calculate length every time database is loaded in
 
-    def get_page(self, k: int) -> str:
-        # input: unique integer
-        # output: page ids to update
-        return self.db["results"][k]["id"]
+    def get_page(self, k: int) -> tuple[str, str]:
+        """Gets page name and id from the database info
 
-    def random_select(self, n: int, prev_pages=None, repeat_freq: int = 0):
-        # randomly select indices
-        # output: list of unique integer
+        Parameters
+        ----------
+        k : int
+            _description_
+
+        Returns
+        -------
+        Tuple[str,str]
+            page_id : str
+                id of the page
+            page_name : str
+                title of the page
+        """
+
+        page_id = self.db["results"][k]["id"]
+        page_name = self.db["results"][k]["properties"]["Name"]["title"][0][
+            "plain_text"
+        ]
+        return (page_id, page_name)
+
+    def random_select(
+        self, n: int, prev_pages: Optional[Sequence] = None, repeat_freq: int = 0
+    ):
+        """randomly selects n unique recipes, checking against previous recipe list for repetition
+
+        Parameters
+        ----------
+        n : int
+            number of recipes to select
+        prev_pages : Optional[Sequence], optional
+            previous list of recipe ids, by default None
+        repeat_freq : int, optional
+            number of times that a recipe from prev_pages can appear, by default 0
+        """
+
         rep = 0
         pages = []
+        page_names = []
         i = 0
         while i < n:
             k = random.randint(0, self.db_len - 1)
-            page = self.get_page(k)
+            page, page_name = self.get_page(k)
             if prev_pages is not None and page in prev_pages:
                 rep += 1
                 if rep > repeat_freq:
@@ -133,13 +183,17 @@ class NotionDatabase:
                 else:
                     i += 1
                     pages.append(page)
+                    page_names.append(page_name)
             elif page in pages:
                 continue
             else:
                 i += 1
                 pages.append(page)
+                page_names.append(page_name)
 
         self.selected_pages = pages
+        self.selected_page_names = page_names
+
         # self.sample = random.sample(range(0,self.db_len),k=n)
 
         # pages = []
@@ -152,24 +206,41 @@ class NotionDatabase:
 
         # type(self).selected_pages = pages  #store list of pages selected (in case size of database changes between calls)
 
-    def get_selected(self, page_ind: Union[None, Sequence] = None):
+    def get_selected(self, page_ind: Optional[Sequence] = None):
+        """Updated self.selected_pages and self.selected_page_names, either with a list of page ids or with all of the pages currently in the database results
+
+        Parameters
+        ----------
+        page_ind : Optional[Sequence], optional
+            list of page ids to select, by default None
+        """
         pages = []
+        page_names = []
         if page_ind == None:
             for i in range(0, self.db_len):
-                pages.append(self.get_page(i))
+                page, page_name = self.get_page(i)
+                pages.append(page)
+                page_names.append(page_name)
             self.selected_pages = pages
+            self.selected_page_names = page_names
         else:
             for p in page_ind:
-                pages.append(self.get_page(p))
+                page, page_name = self.get_page(p)
+                pages.append(page)
+                page_names.append(page_name)
             self.selected_pages = pages
+            self.selected_page_names = page_names
 
     def update_planned(self, properties_to_update: Mapping):
-        # update planned column for specific pages in database
-        # input: pages ids to update in the database
-        # output: calls the NotionClient and updates the properties of each page id in the list
+        """Updates pages in self.selected_pages with the parameter 'Planned this week'
+
+        Parameters
+        ----------
+        properties_to_update : Mapping
+            typically from the notion_filters.py
+        """
+
         for page in self.selected_pages:
-            # could add this in to the random sample code so that I don't have to do a loop twice
-            # but they're short loops so I'm not too worried
             errcode = self.notion_client.update_page(page, properties_to_update)
 
             # check that this worked
@@ -181,24 +252,51 @@ class NotionDatabase:
                 errcode.raise_for_status()
 
 
-def remove_prev(notion_client, notion_key, notion_page_id):
+def remove_prev(
+    notion_client, notion_key: Optional[str], notion_page_id: Optional[str]
+):
+    """_summary_
+
+    Parameters
+    ----------
+    notion_client : NotionClient
+        _description_
+    notion_key : Optional[str]
+        the personal notion key
+    notion_page_id : Optional[str]
+        _description_
+
+    Returns
+    -------
+    NotionDatabase
+        returns a database with the previously selected recipes
+    """
     prev_recipes = NotionDatabase(notion_client)
-    prev_recipes.load_db(notion_page_id, filter_object=filter_prev)
-    print(prev_recipes.db_len)
+    prev_recipes.load_db(notion_page_id, filter_object=nf.filter_prev)
+
     if prev_recipes.db_len > 0:
         prev_recipes.get_selected()
-        prev_recipes.update_planned(update_prev_planned_props)
+        prev_recipes.update_planned(nf.update_prev_planned_props)
     else:
         print("no previous meal plan")
     return prev_recipes
 
 
 def get_mealplan(k: int, repeat_freq: int):
+    """Function that gets the previous meal plan, removes it, and selects a new meal plan.
+
+    Parameters
+    ----------
+    k : int
+        _description_
+    repeat_freq : int
+        _description_
+    """
+
     load_env_variables()
 
     notion_key = os.environ.get("NOTION_KEY")
     notion_page_id = os.environ.get("NOTION_PAGE_ID")
-
     notion_client = NotionClient(notion_key)
 
     # remove prev meal plan
@@ -206,7 +304,8 @@ def get_mealplan(k: int, repeat_freq: int):
 
     # get new meal plan
     recipes = NotionDatabase(notion_client)
-    recipes.load_db(notion_page_id, filter_object=filter_ld)
-    print(recipes.db_len)
+    recipes.load_db(notion_page_id, filter_object=nf.filter_ld)
     recipes.random_select(k, prev_recipes.selected_pages, repeat_freq)
-    recipes.update_planned(update_planned_props)
+    recipes.update_planned(nf.update_planned_props)
+
+    return recipes, notion_client

@@ -127,6 +127,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+notion_mealplan/.env
 
 # Spyder project settings
 .spyderproject
