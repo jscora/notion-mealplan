@@ -31,3 +31,7 @@ def main() -> None:
     print("Meal plan updated")
 
     groc.post_grocery_list(recipes, notion_client)
+
+    print("*****************************************")
+    print("Mealplan complete!")
+    print("*****************************************")

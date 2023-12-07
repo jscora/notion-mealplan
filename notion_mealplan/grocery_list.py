@@ -248,11 +248,18 @@ def ingredients_to_list(recipes, notion_client) -> Optional[Mapping]:
                     ingred_dict["amount"].append(p.amount[0].quantity)
                     ingred_dict["unit"].append(p.amount[0].unit)
                 elif len(p.amount) > 1:
-                    print("ingredient has multiple amounts")
-                    print(p.name.text)
-                    print(p.amount)
-                    ingred_dict["amount"].append(p.amount[0].quantity)
-                    ingred_dict["unit"].append(p.amount[0].unit)
+                    # pick the amount with the highest confidence
+                    prev_conf = 0
+                    amount = None
+                    for a in p.amount:
+                        if a.confidence > prev_conf:
+                            amount = a
+                            prev_conf = a.confidence
+                    if amount is not None:
+                        ingred_dict["amount"].append(amount.quantity)
+                        ingred_dict["unit"].append(amount.unit)
+                    else:
+                        print("amount confidence less than 0 for {0}".format(p.amount))
                 else:
                     ingred_dict["amount"].append("")
                     ingred_dict["unit"].append("")
@@ -557,6 +564,8 @@ def post_grocery_list(recipes, notion_client):
 
             try:
                 notion_client.append_block_children(NOTION_MP_ID, new_blocks)
+
+                print("Updated grocery list")
             except:
                 print("error updating grocery list")
         else:
