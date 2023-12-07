@@ -7,8 +7,9 @@ def get_input() -> tuple[int, int]:
 
     Returns
     -------
-    k, repeat_freq: tuple[int, int]
+    k, int
         k is the number of recipes to get
+    repeat_freq, int
         repeat_freq is the number of those recipes that can be repeats from the previous week
     """
 
@@ -31,6 +32,8 @@ def get_input() -> tuple[int, int]:
 
 
 def main() -> None:
+    """This is the main function that generates the meal plan and grocery list."""
+
     print("Welcome to the Notion Meal Planner")
 
     k, repeat_freq = get_input()
