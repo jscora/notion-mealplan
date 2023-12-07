@@ -54,7 +54,7 @@ def test_get_ingredients(client):
 
 def test_ingredients_to_list(client, loaded_database):
     """Function to test the ingredients_to_list_function"""
-    prev_db = loaded_database(filter_prev)
+    prev_db = loaded_database(filter_b)
     prev_db.get_selected()
 
     parsed_ingredients = groc.ingredients_to_list(prev_db, client)
@@ -66,6 +66,9 @@ def test_ingredients_to_list(client, loaded_database):
 def test_post_grocery_list(client, loaded_database):
     """Function to test that grocery list is posted"""
 
-    prev_db = loaded_database(filter_prev)
+    prev_db = loaded_database(filter_b)
     prev_db.get_selected()
     groc.post_grocery_list(prev_db, client)
+
+    # one way to turn into proper test is to then call function to remove blocks
+    # test that the number of blocks to remove is more than 0

@@ -218,11 +218,7 @@ def ingredients_to_list(recipes, notion_client) -> Optional[Mapping]:
                 continue
 
             elif p.name.confidence < 0.9:
-                print(
-                    "Could not parse {0} effectively, will just add as name".format(
-                        p.sentence
-                    )
-                )
+                # ingredient likely not parsed correctly, just add as is
                 ingred_dict["name"].append(p.sentence)
                 ingred_dict["amount"].append("")
                 ingred_dict["unit"].append("")
@@ -358,7 +354,9 @@ def convert_and_add_ingred(
         new_unit = "{0} + {1}".format(unit_a, unit_b)
         return (new_amount, new_unit)
 
+    # if units are convertible, continue to add them together
     if unit_a_type == "other" or unit_b_type == "other":
+        # if not volume or weight, can't convert
         new_amount = "{0} + {1}".format(amount_a, amount_b)
         new_unit = "{0} + {1}".format(unit_a, unit_b)
 
@@ -400,6 +398,20 @@ def convert_and_add_ingred(
 
 
 def add_amounts(amount_a: str, amount_b: str) -> Union[str, float]:
+    """Function that adds two amounts together
+
+    Parameters
+    ----------
+    amount_a : str
+        amount of a
+    amount_b : str
+        amount of b
+
+    Returns
+    -------
+    Union[str, float]
+        returns either a float of the two added together or a string if not convertible to float
+    """
     try:
         new_amount = float(amount_a) + float(amount_b)
     except:
@@ -427,6 +439,7 @@ def add_ingred_together(ingred, ingred_dict: Mapping, i: int) -> Mapping:
         Dictionary of ingredient name, amount and unit
     """
     unit_a = ingred.amount[0].unit
+
     unit_b = ingred_dict["unit"][i]
 
     # check if units are the same

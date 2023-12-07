@@ -3,6 +3,15 @@ from . import grocery_list as groc
 
 
 def get_input() -> tuple[int, int]:
+    """Function to get input from the user
+
+    Returns
+    -------
+    k, repeat_freq: tuple[int, int]
+        k is the number of recipes to get
+        repeat_freq is the number of those recipes that can be repeats from the previous week
+    """
+
     print("How many recipes do you need this week?")
     k = input()
     print("How much repetition will you allow from last week? (Recommended is 1)")

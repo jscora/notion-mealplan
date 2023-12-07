@@ -151,7 +151,7 @@ def test_remove_prev(loaded_database, client, notion_keys):
     # might also want a negative test for this
     db_1 = loaded_database(filter_b)
     db_1.random_select(1)
-    db_1.update_planned(update_prev_planned_props)
+    db_1.update_planned(update_planned_props)
 
     n_key, n_page_id = notion_keys
     prev_db = mp.remove_prev(client, n_key, n_page_id)
