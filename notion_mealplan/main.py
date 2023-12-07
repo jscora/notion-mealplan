@@ -1,7 +1,8 @@
 from . import mp_functions as mp
+from . import grocery_list as groc
 
 
-def get_input():
+def get_input() -> tuple[int, int]:
     print("How many recipes do you need this week?")
     k = input()
     print("How much repetition will you allow from last week? (Recommended is 1)")
@@ -20,11 +21,13 @@ def get_input():
     return (k, repeat_freq)
 
 
-def main():
+def main() -> None:
     print("Welcome to the Notion Meal Planner")
 
     k, repeat_freq = get_input()
 
-    recipes = mp.get_mealplan(k, repeat_freq)
+    recipes, notion_client = mp.get_mealplan(k, repeat_freq)
 
     print("Meal plan updated")
+
+    groc.post_grocery_list(recipes, notion_client)

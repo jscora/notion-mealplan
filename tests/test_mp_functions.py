@@ -86,9 +86,10 @@ def test_get_page(loaded_database):
     """Function to test that get_page works"""
 
     l_db = loaded_database(None)
-    page = l_db.get_page(0)
+    page, page_name = l_db.get_page(0)
 
     assert isinstance(page, str)
+    assert isinstance(page_name, str)
 
 
 def test_random_select(loaded_database):
@@ -170,35 +171,3 @@ def test_get_mealplan(notion_keys, client, loaded_database):
     # return everything to prev (nothing planned)
     db1.get_selected()
     db1.update_planned(update_prev_planned_props)
-
-
-def test_get_ingredients(client):
-    """Function that tests the get_ingredients function"""
-    page_id = "52003476-fc7c-470b-9b22-886246f0c14e"
-
-    n_page = mp.NotionPage(client, "zoodles")
-    n_page.get_content([page_id])
-
-    assert len(n_page.page_contents) > 0
-
-    ingredients = n_page.get_ingredients()
-
-    assert len(ingredients) > 0
-
-
-def test_ingredients_to_list(client, loaded_database):
-    """Function to test the ingredients_to_list_function"""
-    prev_db = loaded_database(filter_prev)
-    prev_db.get_selected()
-
-    parsed_ingredients = mp.ingredients_to_list(prev_db, client)
-
-    assert len(parsed_ingredients) > 0
-
-
-def test_post_grocery_list(client, loaded_database):
-    """Function to test that grocery list is posted"""
-
-    prev_db = loaded_database(filter_prev)
-    prev_db.get_selected()
-    mp.post_grocery_list(prev_db, client)
