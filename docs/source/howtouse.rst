@@ -3,7 +3,7 @@ How to run the code
 
 To run the Notion Mealplan Generator, follow the steps below:
 
-1. Install the code and Notion template and integration as described above
+1. Install the code and Notion template and integration as described in :doc:`/installation`
 2. Open up terminal and enter the ``notion_mealplan`` directory
 3. Run ``poetry run mealplan``
 4. Respond to the code prompts
