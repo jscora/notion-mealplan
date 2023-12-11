@@ -36,7 +36,7 @@ class NotionPage:
             return self.get_content(new_ids)
 
     def get_ingredients(self) -> Optional[List[str]]:
-        """Finds the ingredients block and returns a list of those ingredients
+        """Finds the ingredients block and returns a list of those ingredients.
 
         Returns
         -------
@@ -547,13 +547,13 @@ def convert_dict_to_notion_todo(ingred_dict: Mapping) -> Mapping:
 
 
 def post_grocery_list(recipes, notion_client):
-    """ Function that removes any old grocery list and posts new grocery list to Notion
+    """Function that removes any old grocery list and posts new grocery list to Notion
 
     Parameters
     ----------
-    recipes : 
+    recipes :
         An instance of the NotionDatabase class
-    notion_client : 
+    notion_client :
         An instance of the NotionClient class
     """
 
