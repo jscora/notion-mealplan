@@ -4,6 +4,7 @@ import os
 import pytest
 from typing import Tuple, List
 import requests
+from ingredient_parser import parse_ingredient
 
 filter_prev = {"property": "Planned this week", "checkbox": {"equals": True}}
 filter_b = {"property": "Dish", "multi_select": {"contains": "Breakfast"}}
@@ -49,6 +50,7 @@ def test_get_ingredients(client):
 
     ingredients = n_page.get_ingredients()
 
+    assert ingredients is not None
     assert len(ingredients) > 0
 
 
@@ -59,7 +61,30 @@ def test_ingredients_to_list(client, loaded_database):
 
     parsed_ingredients = groc.ingredients_to_list(prev_db, client)
 
+    assert parsed_ingredients is not None
     assert len(parsed_ingredients) > 0
+
+
+def test_convert_and_add_ingred():
+    """Function that tests unit conversion and addition"""
+
+    test_ingred = "4 tablespoons of sugar"
+    p_ingred = parse_ingredient(test_ingred)
+    ingred_dict = {
+        "name": ["flour", "sugar"],
+        "amount": ["2", "1/4"],
+        "unit": ["cups", "cups"],
+    }
+
+    unit_a = p_ingred.amount[0].unit
+    unit_b = ingred_dict["unit"][1]
+
+    new_amount, new_unit = groc.convert_and_add_ingred(
+        unit_a, unit_b, p_ingred, ingred_dict, 1
+    )
+
+    assert new_amount == 0.5
+    assert new_unit == "cups"
 
 
 @pytest.mark.skip

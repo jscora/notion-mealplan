@@ -315,6 +315,37 @@ def get_unit_type(unit_a: str) -> str:
         return "other"
 
 
+def test_float(value: str) -> Union[str, float]:
+    """Tests if an amount string can be converted to a float. Converts fractions to floats.
+
+    Parameters
+    ----------
+    value : str
+        an amount
+
+    Returns
+    -------
+    Union[str,float]
+        either returns the original string, or the float value of that string
+    """
+    try:
+        return float(value)
+    except ValueError:
+        try:
+            num, denom = value.split("/")
+        except ValueError:
+            return value
+        try:
+            leading, num = num.split(" ")
+            whole = float(leading)
+        except ValueError:
+            whole = 0
+        frac = float(num) / float(denom)
+        return whole - frac if whole < 0 else whole + frac
+    except:
+        return value
+
+
 def convert_and_add_ingred(
     unit_a: str, unit_b: str, ingred, ingred_dict: Mapping, i: int
 ) -> tuple[str, str]:
@@ -343,10 +374,13 @@ def convert_and_add_ingred(
     unit_a_type = get_unit_type(unit_a)
     unit_b_type = get_unit_type(unit_b)
 
-    try:
-        amount_a = float(ingred.amount[0].quantity)
-        amount_b = float(ingred_dict["amount"][i])
-    except:
+    # test each variable
+    # then add in a test if isinstance float for each variable
+    # if not then do the 'not convertible' part
+    amount_a = test_float(ingred.amount[0].quantity)
+    amount_b = test_float(ingred_dict["amount"][i])
+
+    if isinstance(amount_a, str) or isinstance(amount_b, str):
         # amounts not convertible
         new_amount = "{0} + {1}".format(
             ingred.amount[0].quantity, ingred_dict["amount"][i]
